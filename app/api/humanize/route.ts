@@ -5,16 +5,20 @@ import { getClient, humanizeToTarget, readText } from "@/lib/ai";
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
-  const { text, error } = await readText(req);
-  if (error) return NextResponse.json({ error }, { status: 400 });
-  if (!text || text.trim().length < 50) {
-    return NextResponse.json({ error: "Le texte doit contenir au moins 50 caractères." }, { status: 400 });
-  }
-
   try {
+    const { text, error } = await readText(req);
+    if (error) return NextResponse.json({ error }, { status: 400 });
+    if (!text || text.trim().length < 50) {
+      return NextResponse.json({ error: "Le texte doit contenir au moins 50 caractères." }, { status: 400 });
+    }
+
+    const key = process.env.GROQ_API_KEY;
+    if (!key) return NextResponse.json({ error: "GROQ_API_KEY manquante côté serveur." }, { status: 500 });
+
     const result = await humanizeToTarget(getClient(), text);
     return NextResponse.json(result);
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

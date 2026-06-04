@@ -2,9 +2,9 @@ import Groq from "groq-sdk";
 
 // Modèles par ordre de puissance — fallback automatique
 export const MODELS = [
-  "moonshotai/kimi-k2-instruct",
   "llama-3.3-70b-versatile",
   "llama3-70b-8192",
+  "llama3-8b-8192",
 ];
 
 export interface DetectionResult {
@@ -157,8 +157,8 @@ export interface HumanizeResult {
 export async function humanizeToTarget(
   groq: Groq,
   text: string,
-  target = 12,
-  maxIterations = 4
+  target = 20,
+  maxIterations = 2
 ): Promise<HumanizeResult> {
   let current = text;
   let best = "";

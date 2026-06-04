@@ -17,6 +17,7 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: "BuyVerify — Détection & Humanisation IA",
   description: "Détectez les traces d'IA dans vos documents et humanisez-les à 100%",
+  icons: { icon: "/favicon.svg" },
 };
 
 export default function RootLayout({

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+// Most capable & precise model on Groq as of 2026
+const MODEL = "moonshotai/kimi-k2-instruct";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,10 +17,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-6",
+    const completion = await groq.chat.completions.create({
+      model: MODEL,
       max_tokens: 1024,
-      system: `Tu es un expert en détection de textes générés par IA. Analyse le texte fourni et détermine le pourcentage de contenu généré par IA (0% = 100% humain, 100% = 100% IA).
+      temperature: 0.1,
+      messages: [
+        {
+          role: "system",
+          content: `Tu es un expert en détection de textes générés par IA. Analyse le texte et détermine le pourcentage de contenu généré par IA (0% = 100% humain, 100% = 100% IA).
 
 Critères d'analyse :
 - Structure répétitive et formules génériques
@@ -28,14 +35,14 @@ Critères d'analyse :
 - Absence de références personnelles ou d'opinions tranchées
 - Cohérence surnaturelle du style
 
-Réponds UNIQUEMENT en JSON valide avec ce format exact :
+Réponds UNIQUEMENT en JSON valide :
 {
-  "percentage": <nombre entre 0 et 100>,
+  "percentage": <0-100>,
   "confidence": "<faible|moyenne|élevée>",
   "indicators": ["<indicateur 1>", "<indicateur 2>", ...],
   "summary": "<résumé en 1-2 phrases>"
 }`,
-      messages: [
+        },
         {
           role: "user",
           content: `Analyse ce texte pour détecter les traces d'IA :\n\n${text}`,
@@ -43,18 +50,12 @@ Réponds UNIQUEMENT en JSON valide avec ce format exact :
       ],
     });
 
-    const content = message.content[0];
-    if (content.type !== "text") {
-      throw new Error("Unexpected response type");
-    }
+    const raw = completion.choices[0]?.message?.content ?? "";
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error("Réponse invalide du modèle");
 
-    const jsonMatch = content.text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("Invalid JSON response");
-
-    const result = JSON.parse(jsonMatch[0]);
-    return NextResponse.json(result);
+    return NextResponse.json(JSON.parse(match[0]));
   } catch (err) {
-    const error = err as Error;
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }
 }

@@ -11,589 +11,549 @@ interface DetectionResult {
 
 type Step = "input" | "detecting" | "result" | "humanizing" | "humanized";
 
-function ScoreRing({ percentage }: { percentage: number }) {
-  const [displayed, setDisplayed] = useState(0);
-  const r = 54;
+/* ── Score Ring ─────────────────────────────────────────────── */
+function ScoreRing({ pct }: { pct: number }) {
+  const [val, setVal] = useState(0);
+  const r = 52;
   const circ = 2 * Math.PI * r;
-  const offset = circ * (1 - displayed / 100);
-
-  const color =
-    percentage >= 70 ? "#ef4444" : percentage >= 40 ? "#f97316" : "#22c55e";
-  const glow =
-    percentage >= 70
-      ? "drop-shadow(0 0 12px rgba(239,68,68,0.6))"
-      : percentage >= 40
-      ? "drop-shadow(0 0 12px rgba(249,115,22,0.6))"
-      : "drop-shadow(0 0 12px rgba(34,197,94,0.6))";
 
   useEffect(() => {
     let raf: number;
-    const start = performance.now();
-    const duration = 1200;
-    const animate = (now: number) => {
-      const t = Math.min((now - start) / duration, 1);
-      const ease = 1 - Math.pow(1 - t, 3);
-      setDisplayed(Math.round(ease * percentage));
-      if (t < 1) raf = requestAnimationFrame(animate);
+    const t0 = performance.now();
+    const run = (now: number) => {
+      const p = Math.min((now - t0) / 1100, 1);
+      const ease = 1 - Math.pow(1 - p, 3);
+      setVal(Math.round(ease * pct));
+      if (p < 1) raf = requestAnimationFrame(run);
     };
-    raf = requestAnimationFrame(animate);
+    raf = requestAnimationFrame(run);
     return () => cancelAnimationFrame(raf);
-  }, [percentage]);
+  }, [pct]);
+
+  const color = pct >= 70 ? "#dc2626" : pct >= 40 ? "#d97706" : "#16a34a";
+  const trackColor = pct >= 70 ? "#fef2f2" : pct >= 40 ? "#fffbeb" : "#f0fdf4";
+  const offset = circ * (1 - val / 100);
 
   return (
-    <div className="relative w-36 h-36 mx-auto">
-      <svg className="w-36 h-36 -rotate-90" viewBox="0 0 120 120">
-        <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="10" />
+    <div className="relative" style={{ width: 140, height: 140 }}>
+      <svg width="140" height="140" style={{ transform: "rotate(-90deg)" }}>
+        <circle cx="70" cy="70" r={r} fill="none" stroke={trackColor} strokeWidth="10" />
         <circle
-          cx="60" cy="60" r={r}
+          cx="70" cy="70" r={r}
           fill="none"
           stroke={color}
           strokeWidth="10"
           strokeLinecap="round"
           strokeDasharray={circ}
           strokeDashoffset={offset}
-          style={{ filter: glow, transition: "stroke 0.3s" }}
+          style={{ transition: "stroke 0.4s ease" }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-3xl font-bold tabular-nums" style={{ color }}>{displayed}%</span>
-        <span className="text-[11px] text-gray-500 mt-0.5">IA détectée</span>
+        <span className="font-display text-3xl font-800 tabular-nums leading-none" style={{ color, fontFamily: "var(--font-display)", fontWeight: 800 }}>
+          {val}%
+        </span>
+        <span className="text-xs mt-1" style={{ color: "var(--text-3)", fontFamily: "var(--font-body)" }}>IA détectée</span>
       </div>
     </div>
   );
 }
 
-function ConfidencePill({ confidence }: { confidence: string }) {
-  const map: Record<string, string> = {
-    faible: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
-    moyenne: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-    élevée: "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  };
+/* ── Bar ────────────────────────────────────────────────────── */
+function Bar({ label, pct, color }: { label: string; pct: number; color: string }) {
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => setW(pct), 80);
+    return () => clearTimeout(t);
+  }, [pct]);
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${map[confidence] ?? "bg-gray-500/10 text-gray-400 border-gray-500/20"}`}>
-      {confidence}
-    </span>
+    <div className="flex items-center gap-3">
+      <span className="text-xs w-14 shrink-0" style={{ color: "var(--text-3)", fontFamily: "var(--font-body)" }}>{label}</span>
+      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--surface-3)" }}>
+        <div
+          className="h-full rounded-full"
+          style={{
+            width: `${w}%`,
+            background: color,
+            transition: "width 900ms cubic-bezier(.22,1,.36,1)",
+          }}
+        />
+      </div>
+      <span className="text-xs tabular-nums w-8 text-right" style={{ color: "var(--text-2)" }}>{pct}%</span>
+    </div>
   );
 }
 
-function UploadZone({ onText }: { onText: (t: string, name: string) => void }) {
+/* ── Upload zone ────────────────────────────────────────────── */
+function UploadZone({ onText }: { onText: (t: string) => void }) {
   const [dragging, setDragging] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [fileName, setFileName] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [name, setName] = useState("");
+  const ref = useRef<HTMLInputElement>(null);
 
-  const processFile = useCallback(async (file: File) => {
-    setLoading(true);
-    setFileName(file.name);
+  const process = useCallback(async (file: File) => {
+    setBusy(true); setName(file.name);
     const ext = file.name.split(".").pop()?.toLowerCase();
     try {
-      if (ext === "txt") {
-        const text = await file.text();
-        onText(text, file.name);
-      } else if (ext === "pdf" || ext === "docx") {
-        const fd = new FormData();
-        fd.append("file", file);
-        const res = await fetch("/api/parse", { method: "POST", body: fd });
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
-        onText(data.text, file.name);
-      } else {
-        alert("Format non supporté. Utilisez .txt, .pdf ou .docx");
-        setFileName("");
-      }
-    } catch (e) {
-      alert((e as Error).message);
-      setFileName("");
-    }
-    setLoading(false);
+      if (ext === "txt") { onText(await file.text()); }
+      else if (ext === "pdf" || ext === "docx") {
+        const fd = new FormData(); fd.append("file", file);
+        const r = await fetch("/api/parse", { method: "POST", body: fd });
+        const d = await r.json();
+        if (d.error) throw new Error(d.error);
+        onText(d.text);
+      } else { alert("Formats : .txt · .pdf · .docx"); setName(""); }
+    } catch (e) { alert((e as Error).message); setName(""); }
+    setBusy(false);
   }, [onText]);
-
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) processFile(file);
-  }, [processFile]);
 
   return (
     <div
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)}
-      onDrop={onDrop}
-      onClick={() => inputRef.current?.click()}
-      className={`relative cursor-pointer rounded-2xl p-8 text-center transition-all duration-200 overflow-hidden
-        ${dragging
-          ? "border-2 border-violet-400 bg-violet-500/10"
-          : "border-2 border-dashed border-white/10 hover:border-white/20 hover:bg-white/[0.02]"
-        }`}
+      onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) process(f); }}
+      onClick={() => ref.current?.click()}
+      style={{
+        borderRadius: "var(--r-xl)",
+        border: `2px dashed ${dragging ? "var(--accent)" : "var(--border)"}`,
+        background: dragging ? "var(--accent-bg)" : "var(--surface-2)",
+        padding: "28px 24px",
+        textAlign: "center",
+        cursor: "pointer",
+        transition: "border-color 150ms ease, background 150ms ease",
+      }}
     >
-      <div className="absolute inset-0 bg-gradient-to-br from-violet-600/5 to-blue-600/5 pointer-events-none" />
-
-      {loading ? (
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-full border-2 border-violet-500 border-t-transparent animate-spin" />
-          <p className="text-sm text-gray-400">Extraction du texte...</p>
-        </div>
-      ) : fileName ? (
+      {busy ? (
         <div className="flex flex-col items-center gap-2">
-          <div className="w-10 h-10 rounded-xl bg-violet-500/20 flex items-center justify-center text-xl">✓</div>
-          <p className="text-sm text-violet-300 font-medium">{fileName}</p>
-          <p className="text-xs text-gray-500">Cliquer pour changer</p>
+          <div style={{ width: 32, height: 32, borderRadius: "50%", border: "2px solid var(--border)", borderTopColor: "var(--accent)", animation: "spin 0.8s linear infinite" }} />
+          <span style={{ fontSize: 13, color: "var(--text-3)" }}>Extraction…</span>
+        </div>
+      ) : name ? (
+        <div className="flex flex-col items-center gap-1">
+          <span style={{ fontSize: 22 }}>📄</span>
+          <span style={{ fontSize: 13, color: "var(--accent)", fontWeight: 600 }}>{name}</span>
+          <span style={{ fontSize: 12, color: "var(--text-3)" }}>Cliquer pour changer</span>
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-2xl animate-float">
-            📂
-          </div>
-          <div>
-            <p className="text-sm text-gray-300">
-              Glissez un fichier ou{" "}
-              <span className="text-violet-400 font-medium">parcourir</span>
-            </p>
-            <p className="text-xs text-gray-600 mt-1">PDF · DOCX · TXT</p>
-          </div>
-          <div className="flex items-center gap-2 mt-1">
+        <div className="flex flex-col items-center gap-2">
+          <span style={{ fontSize: 28 }}>📂</span>
+          <p style={{ fontSize: 14, color: "var(--text-2)", margin: 0 }}>
+            Glissez ou <span style={{ color: "var(--accent)", fontWeight: 600 }}>parcourez</span>
+          </p>
+          <div className="flex items-center gap-1.5 mt-1">
             {["PDF", "DOCX", "TXT"].map((f) => (
-              <span key={f} className="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[10px] text-gray-400 font-mono">
-                .{f.toLowerCase()}
-              </span>
+              <span key={f} style={{
+                padding: "2px 8px", borderRadius: "var(--r-sm)",
+                border: "1px solid var(--border)", background: "var(--surface)",
+                fontSize: 11, color: "var(--text-3)", fontFamily: "monospace",
+              }}>.{f.toLowerCase()}</span>
             ))}
           </div>
         </div>
       )}
-
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".txt,.pdf,.docx"
-        className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) processFile(f); }}
-      />
+      <input ref={ref} type="file" accept=".txt,.pdf,.docx" className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) process(f); }} />
     </div>
   );
 }
 
+/* ── Spinner for loading states ─────────────────────────────── */
+function Spinner({ color = "var(--accent)" }: { color?: string }) {
+  return (
+    <div style={{
+      width: 40, height: 40, borderRadius: "50%",
+      border: "3px solid var(--border)",
+      borderTopColor: color,
+      animation: "spin 0.8s linear infinite",
+    }} />
+  );
+}
+
+/* ── Confidence badge ───────────────────────────────────────── */
+function Badge({ label, variant }: { label: string; variant: "default" | "warn" | "success" | "accent" }) {
+  const styles = {
+    default: { bg: "var(--surface-3)", color: "var(--text-2)", border: "var(--border)" },
+    warn:    { bg: "var(--warn-bg)", color: "var(--warn)", border: "#fde68a" },
+    success: { bg: "var(--success-bg)", color: "var(--success)", border: "#bbf7d0" },
+    accent:  { bg: "var(--accent-bg)", color: "var(--accent)", border: "#c7d2fe" },
+  }[variant];
+  return (
+    <span style={{
+      padding: "3px 10px", borderRadius: 99,
+      background: styles.bg, color: styles.color,
+      border: `1px solid ${styles.border}`,
+      fontSize: 12, fontWeight: 600,
+    }}>{label}</span>
+  );
+}
+
+/* ── Main page ──────────────────────────────────────────────── */
 export default function Home() {
   const [text, setText] = useState("");
-  const [humanizedText, setHumanizedText] = useState("");
-  const [detection, setDetection] = useState<DetectionResult | null>(null);
+  const [humanized, setHumanized] = useState("");
+  const [result, setResult] = useState<DetectionResult | null>(null);
   const [step, setStep] = useState<Step>("input");
   const [error, setError] = useState("");
-  const [charCount, setCharCount] = useState(0);
 
-  const handleTextChange = (val: string) => {
-    setText(val);
-    setCharCount(val.length);
-  };
-
-  const handleDetect = async () => {
-    if (text.trim().length < 50) { setError("Minimum 50 caractères requis."); return; }
+  const detect = async (src: string) => {
     setError(""); setStep("detecting");
     try {
-      const res = await fetch("/api/detect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setDetection(data); setStep("result");
+      const r = await fetch("/api/detect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: src }) });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setResult(d); setStep("result");
     } catch (e) { setError((e as Error).message); setStep("input"); }
   };
 
-  const handleHumanize = async () => {
+  const humanize = async () => {
     setError(""); setStep("humanizing");
     try {
-      const res = await fetch("/api/humanize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setHumanizedText(data.humanizedText); setStep("humanized");
+      const r = await fetch("/api/humanize", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setHumanized(d.humanizedText); setStep("humanized");
     } catch (e) { setError((e as Error).message); setStep("result"); }
   };
 
-  const handleReset = () => {
-    setText(""); setHumanizedText(""); setDetection(null);
-    setStep("input"); setError(""); setCharCount(0);
+  const reset = () => { setText(""); setHumanized(""); setResult(null); setStep("input"); setError(""); };
+  const verify = () => { const t = humanized; setText(t); setHumanized(""); setResult(null); detect(t); };
+  const copy = (s: string) => navigator.clipboard.writeText(s);
+  const dl = (s: string) => {
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([s], { type: "text/plain" })), download: "texte-humanise.txt" });
+    a.click();
   };
-
-  const handleVerify = async () => {
-    const toVerify = humanizedText;
-    setText(toVerify); setHumanizedText(""); setDetection(null);
-    setStep("detecting"); setError("");
-    try {
-      const res = await fetch("/api/detect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: toVerify }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setDetection(data); setStep("result");
-    } catch (e) { setError((e as Error).message); setStep("input"); }
-  };
-
-  const download = (content: string, filename: string) => {
-    const url = URL.createObjectURL(new Blob([content], { type: "text/plain" }));
-    Object.assign(document.createElement("a"), { href: url, download: filename }).click();
-    URL.revokeObjectURL(url);
-  };
-
-  const copy = (content: string) => navigator.clipboard.writeText(content);
 
   const scoreLabel = (p: number) =>
-    p >= 80 ? "Très probablement IA" : p >= 60 ? "Probablement IA" : p >= 40 ? "Mixte humain / IA" : p >= 20 ? "Probablement humain" : "Très probablement humain";
-
-  const scoreColor = (p: number) =>
-    p >= 70 ? "text-red-400" : p >= 40 ? "text-orange-400" : "text-emerald-400";
+    p >= 80 ? "Très probablement IA" : p >= 60 ? "Probablement IA" : p >= 40 ? "Mixte" : p >= 20 ? "Probablement humain" : "Très probablement humain";
+  const scoreVariant = (p: number): "warn" | "success" | "accent" =>
+    p >= 60 ? "warn" : p >= 30 ? "accent" : "success";
 
   return (
-    <div className="min-h-screen bg-[#030712] text-white overflow-x-hidden">
-      {/* Ambient background */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-violet-600/10 rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-blue-600/8 rounded-full blur-[100px]" />
-      </div>
+    <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-      {/* Header */}
-      <header className="relative z-10 border-b border-white/[0.06]">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-blue-600 flex items-center justify-center font-bold text-sm shadow-lg shadow-violet-500/25 animate-pulse-ring">
-                AI
-              </div>
-            </div>
-            <div>
-              <div className="font-bold text-base tracking-tight">BuyVerify</div>
-              <div className="text-[11px] text-gray-500">Détection & Humanisation IA</div>
-            </div>
+      {/* ── Header ── */}
+      <header style={{
+        position: "sticky", top: 0, zIndex: 50,
+        background: "rgba(241,241,243,0.85)",
+        backdropFilter: "blur(12px)",
+        borderBottom: "1px solid var(--border)",
+      }}>
+        <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 24px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          {/* Logo */}
+          <div className="flex items-center gap-2.5">
+            <div style={{
+              width: 32, height: 32, borderRadius: "var(--r-md)",
+              background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 13, fontWeight: 800, color: "#fff", fontFamily: "var(--font-display)",
+              boxShadow: "0 2px 8px rgba(79,70,229,.3)",
+            }}>BV</div>
+            <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, color: "var(--text-1)", letterSpacing: "-0.02em" }}>
+              BuyVerify
+            </span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {step !== "input" && (
-              <button
-                onClick={handleReset}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-gray-400 hover:text-white glass glass-hover transition-all"
-              >
-                <span>+</span> Nouveau
+              <button onClick={reset} className="btn-ghost" style={{ padding: "6px 16px", fontSize: 13 }}>
+                + Nouveau
               </button>
             )}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full glass text-xs text-gray-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <div style={{
+              padding: "4px 12px", borderRadius: 99,
+              background: "var(--success-bg)", border: "1px solid #bbf7d0",
+              fontSize: 12, color: "var(--success)",
+              display: "flex", alignItems: "center", gap: 6,
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--success)", display: "inline-block" }} />
               En ligne
             </div>
           </div>
         </div>
       </header>
 
-      <main className="relative z-10 max-w-5xl mx-auto px-6 py-12">
+      <main style={{ maxWidth: 900, margin: "0 auto", padding: "48px 24px 96px" }}>
 
-        {/* ── INPUT ── */}
+        {/* ══ INPUT ══════════════════════════════════════════════ */}
         {step === "input" && (
-          <div className="max-w-3xl mx-auto space-y-8">
+          <div style={{ maxWidth: 680, margin: "0 auto" }}>
+
             {/* Hero */}
-            <div className="text-center space-y-4">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full glass text-xs text-violet-300 border border-violet-500/20 mb-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
-                Propulsé par Claude AI
+            <div className="animate-fade-up" style={{ marginBottom: 40 }}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "4px 12px", borderRadius: 99, background: "var(--accent-bg)", border: "1px solid #c7d2fe", marginBottom: 20 }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)", display: "inline-block" }} />
+                <span style={{ fontSize: 12, color: "var(--accent)", fontWeight: 600 }}>Propulsé par Claude AI</span>
               </div>
-              <h1 className="text-4xl sm:text-5xl font-bold leading-tight">
-                Détectez et{" "}
-                <span className="bg-gradient-to-r from-violet-400 via-blue-400 to-cyan-400 bg-clip-text text-transparent animate-shimmer">
-                  humanisez
-                </span>
-                {" "}vos textes
+              <h1 style={{
+                fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "clamp(28px, 4vw, 44px)",
+                letterSpacing: "-0.03em", lineHeight: 1.1, color: "var(--text-1)", margin: "0 0 14px",
+              }}>
+                Détectez les traces d&apos;IA.<br />
+                <span style={{ color: "var(--accent)" }}>Humanisez à 100%.</span>
               </h1>
-              <p className="text-gray-400 text-lg max-w-xl mx-auto leading-relaxed">
-                Analysez le taux d&apos;IA dans n&apos;importe quel document, puis transformez-le en texte 100% naturel.
+              <p style={{ fontSize: 16, color: "var(--text-2)", margin: 0, lineHeight: 1.7 }}>
+                Analysez n&apos;importe quel document, obtenez un score précis,<br />puis réécrivez-le pour qu&apos;il soit indétectable.
               </p>
             </div>
 
-            {/* Stats bar */}
-            <div className="grid grid-cols-3 gap-3">
+            {/* Stats row */}
+            <div className="animate-fade-up stagger-1" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 28 }}>
               {[
-                { label: "Précision", value: "~94%", icon: "🎯" },
-                { label: "Formats", value: "3", icon: "📄" },
-                { label: "Humanisation", value: "100%", icon: "✨" },
+                { v: "~94%", l: "Précision", icon: "🎯" },
+                { v: "PDF · DOCX · TXT", l: "Formats", icon: "📄" },
+                { v: "100%", l: "Humanisation", icon: "✨" },
               ].map((s) => (
-                <div key={s.label} className="glass rounded-2xl p-4 text-center">
-                  <div className="text-xl mb-1">{s.icon}</div>
-                  <div className="text-lg font-bold text-white">{s.value}</div>
-                  <div className="text-xs text-gray-500">{s.label}</div>
+                <div key={s.l} className="card" style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 20 }}>{s.icon}</span>
+                  <div>
+                    <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 15, color: "var(--text-1)" }}>{s.v}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-3)" }}>{s.l}</div>
+                  </div>
                 </div>
               ))}
             </div>
 
-            {/* Text input */}
-            <div className="glass rounded-2xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
-                <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Texte à analyser</span>
-                <span className={`text-xs tabular-nums ${charCount >= 50 ? "text-emerald-400" : "text-gray-600"}`}>
-                  {charCount} / 50 min
+            {/* Text input card */}
+            <div className="animate-fade-up stagger-2 card" style={{ marginBottom: 16, overflow: "hidden" }}>
+              <div style={{
+                padding: "10px 16px",
+                borderBottom: "1px solid var(--border-soft)",
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+              }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.08em", textTransform: "uppercase" }}>Texte à analyser</span>
+                <span style={{ fontSize: 12, color: text.length >= 50 ? "var(--success)" : "var(--text-3)", fontVariantNumeric: "tabular-nums" }}>
+                  {text.length} car. {text.length < 50 ? `(${50 - text.length} manquants)` : "✓"}
                 </span>
               </div>
               <textarea
                 value={text}
-                onChange={(e) => handleTextChange(e.target.value)}
+                onChange={(e) => setText(e.target.value)}
                 placeholder="Collez votre texte ici…"
-                className="w-full h-52 bg-transparent p-4 text-gray-200 placeholder-gray-600 resize-none focus:outline-none text-sm leading-7"
+                style={{
+                  width: "100%", height: 200, padding: "16px",
+                  background: "transparent", border: "none", outline: "none", resize: "none",
+                  fontSize: 14, color: "var(--text-1)", lineHeight: 1.75,
+                  fontFamily: "var(--font-body)",
+                }}
               />
             </div>
 
-            {/* Separator */}
-            <div className="flex items-center gap-4">
-              <div className="flex-1 h-px bg-white/[0.06]" />
-              <span className="text-xs text-gray-600 px-2">ou importez un fichier</span>
-              <div className="flex-1 h-px bg-white/[0.06]" />
+            {/* Divider */}
+            <div className="animate-fade-up stagger-3" style={{ display: "flex", alignItems: "center", gap: 16, margin: "20px 0" }}>
+              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+              <span style={{ fontSize: 12, color: "var(--text-3)" }}>ou importez un fichier</span>
+              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
             </div>
 
-            <UploadZone onText={(t) => { handleTextChange(t); }} />
+            <div className="animate-fade-up stagger-4" style={{ marginBottom: 20 }}>
+              <UploadZone onText={setText} />
+            </div>
 
             {error && (
-              <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
-                <span className="text-lg">⚠️</span> {error}
+              <div className="animate-scale-in" style={{
+                padding: "12px 16px", borderRadius: "var(--r-md)",
+                background: "var(--error-bg)", border: "1px solid #fecaca",
+                color: "var(--error)", fontSize: 13, marginBottom: 16,
+                display: "flex", gap: 8, alignItems: "flex-start",
+              }}>
+                <span>⚠</span> {error}
               </div>
             )}
 
             <button
-              onClick={handleDetect}
+              className="animate-fade-up stagger-5 btn-accent"
+              onClick={() => detect(text)}
               disabled={text.trim().length < 50}
-              className="w-full py-4 rounded-2xl font-semibold text-base relative overflow-hidden group transition-all
-                bg-gradient-to-r from-violet-600 to-blue-600
-                hover:from-violet-500 hover:to-blue-500
-                disabled:opacity-30 disabled:cursor-not-allowed
-                shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40"
+              style={{ width: "100%", padding: "15px 24px", fontSize: 15 }}
             >
-              <span className="relative z-10 flex items-center justify-center gap-2">
-                <span>🔍</span> Analyser le texte
-              </span>
+              Analyser le texte
             </button>
           </div>
         )}
 
-        {/* ── DETECTING ── */}
+        {/* ══ DETECTING ══════════════════════════════════════════ */}
         {step === "detecting" && (
-          <div className="max-w-md mx-auto text-center py-24 space-y-8">
-            <div className="relative w-28 h-28 mx-auto">
-              <div className="absolute inset-0 rounded-full bg-violet-500/10" />
-              <div className="absolute inset-2 rounded-full border-2 border-violet-500/30 border-t-violet-400 animate-spin" />
-              <div className="absolute inset-5 rounded-full border-2 border-blue-500/20 border-t-blue-400 animate-spin" style={{ animationDirection: "reverse", animationDuration: "1.5s" }} />
-              <div className="absolute inset-0 flex items-center justify-center text-3xl">🔍</div>
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold mb-2">Analyse en cours…</h2>
-              <p className="text-gray-500 text-sm">Claude inspecte les patterns stylistiques de votre texte</p>
-            </div>
-            <div className="flex items-center justify-center gap-1">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
-              ))}
-            </div>
+          <div className="animate-fade-in" style={{ textAlign: "center", padding: "80px 0" }}>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}><Spinner /></div>
+            <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 22, margin: "0 0 8px", color: "var(--text-1)" }}>
+              Analyse en cours…
+            </h2>
+            <p style={{ color: "var(--text-3)", fontSize: 14, margin: 0 }}>Claude inspecte les patterns stylistiques</p>
           </div>
         )}
 
-        {/* ── RESULT ── */}
-        {step === "result" && detection && (
-          <div className="max-w-3xl mx-auto space-y-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Résultat de l&apos;analyse</h2>
-              <ConfidencePill confidence={detection.confidence} />
+        {/* ══ RESULT ═════════════════════════════════════════════ */}
+        {step === "result" && result && (
+          <div style={{ maxWidth: 780, margin: "0 auto" }}>
+
+            {/* Page title */}
+            <div className="animate-fade-up" style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+              <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 26, margin: 0, letterSpacing: "-0.02em", color: "var(--text-1)" }}>
+                Résultat de l&apos;analyse
+              </h2>
+              <Badge label={`Confiance ${result.confidence}`} variant={result.confidence === "élevée" ? "success" : result.confidence === "moyenne" ? "accent" : "default"} />
             </div>
 
-            {/* Score card */}
-            <div className="glass rounded-3xl p-8">
-              <div className="flex flex-col sm:flex-row items-center gap-8">
-                <ScoreRing percentage={detection.percentage} />
-                <div className="flex-1 space-y-3 text-center sm:text-left">
-                  <div>
-                    <div className={`text-2xl font-bold ${scoreColor(detection.percentage)}`}>
-                      {scoreLabel(detection.percentage)}
-                    </div>
-                    <p className="text-gray-400 text-sm mt-2 leading-relaxed">{detection.summary}</p>
-                  </div>
-                  {/* Mini progress bars */}
-                  <div className="space-y-2 pt-2">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-gray-500 w-16">IA</span>
-                      <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-red-500 to-orange-500 transition-all duration-1000"
-                          style={{ width: `${detection.percentage}%` }}
-                        />
-                      </div>
-                      <span className="text-xs tabular-nums text-gray-400 w-8">{detection.percentage}%</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-gray-500 w-16">Humain</span>
-                      <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all duration-1000"
-                          style={{ width: `${100 - detection.percentage}%` }}
-                        />
-                      </div>
-                      <span className="text-xs tabular-nums text-gray-400 w-8">{100 - detection.percentage}%</span>
-                    </div>
-                  </div>
+            {/* Score + summary — asymmetric layout */}
+            <div className="animate-scale-in card stagger-1" style={{ padding: "32px", marginBottom: 16, display: "grid", gridTemplateColumns: "auto 1fr", gap: 40, alignItems: "center" }}>
+              <ScoreRing pct={result.percentage} />
+              <div>
+                <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 22, color: result.percentage >= 70 ? "var(--error)" : result.percentage >= 40 ? "var(--warn)" : "var(--success)", marginBottom: 8 }}>
+                  {scoreLabel(result.percentage)}
+                </div>
+                <p style={{ color: "var(--text-2)", fontSize: 14, lineHeight: 1.7, margin: "0 0 20px" }}>{result.summary}</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <Bar label="IA" pct={result.percentage} color={result.percentage >= 70 ? "var(--error)" : result.percentage >= 40 ? "var(--warn)" : "#fca5a5"} />
+                  <Bar label="Humain" pct={100 - result.percentage} color="var(--success)" />
                 </div>
               </div>
             </div>
 
-            {/* Indicators */}
-            {detection.indicators.length > 0 && (
-              <div className="glass rounded-2xl p-6">
-                <h3 className="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
-                  <span className="text-violet-400">▸</span> Indicateurs détectés
+            {/* Indicators grid */}
+            {result.indicators.length > 0 && (
+              <div className="animate-fade-up stagger-2 card" style={{ padding: "24px", marginBottom: 16 }}>
+                <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 14, color: "var(--text-1)", margin: "0 0 16px", letterSpacing: "-0.01em" }}>
+                  Indicateurs détectés
                 </h3>
-                <div className="grid sm:grid-cols-2 gap-2">
-                  {detection.indicators.map((ind, i) => (
-                    <div key={i} className="flex items-start gap-2.5 p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-                      <span className="text-violet-400/60 mt-0.5 text-xs">◆</span>
-                      <span className="text-sm text-gray-400 leading-relaxed">{ind}</span>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 8 }}>
+                  {result.indicators.map((ind, i) => (
+                    <div key={i} className="animate-slide-right" style={{
+                      animationDelay: `${i * 50}ms`,
+                      padding: "10px 14px",
+                      borderRadius: "var(--r-md)",
+                      background: "var(--surface-2)",
+                      border: "1px solid var(--border-soft)",
+                      display: "flex", gap: 10, alignItems: "flex-start",
+                    }}>
+                      <span style={{ color: "var(--accent)", fontWeight: 700, fontSize: 12, marginTop: 1 }}>◆</span>
+                      <span style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.5 }}>{ind}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Text preview */}
-            <div className="glass rounded-2xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Texte analysé</span>
-                <button onClick={() => copy(text)} className="text-xs text-gray-600 hover:text-gray-300 transition-colors">Copier</button>
+            {/* Original text preview */}
+            <div className="animate-fade-up stagger-3 card" style={{ padding: "20px 24px", marginBottom: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.08em", textTransform: "uppercase" }}>Texte analysé</span>
+                <button onClick={() => copy(text)} style={{ fontSize: 12, color: "var(--text-3)", background: "none", border: "none", cursor: "pointer", padding: "2px 8px" }}>
+                  Copier
+                </button>
               </div>
-              <p className="text-sm text-gray-500 leading-relaxed line-clamp-4">{text}</p>
+              <p style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.7, margin: 0, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                {text}
+              </p>
             </div>
 
             {error && (
-              <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
-                <span>⚠️</span> {error}
+              <div style={{ padding: "12px 16px", borderRadius: "var(--r-md)", background: "var(--error-bg)", border: "1px solid #fecaca", color: "var(--error)", fontSize: 13, marginBottom: 16 }}>
+                ⚠ {error}
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <button
-                onClick={handleReset}
-                className="py-3.5 rounded-2xl text-sm font-medium glass glass-hover text-gray-300 hover:text-white transition-all"
-              >
+            <div className="animate-fade-up" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <button className="btn-ghost" onClick={reset} style={{ padding: "14px", fontSize: 14 }}>
                 Nouveau texte
               </button>
-              <button
-                onClick={handleHumanize}
-                className="py-3.5 rounded-2xl text-sm font-semibold bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 transition-all shadow-lg shadow-violet-500/20 flex items-center justify-center gap-2"
-              >
-                <span>✨</span> Humaniser → 0% IA
+              <button className="btn-accent" onClick={humanize} style={{ padding: "14px", fontSize: 14 }}>
+                ✨ Humaniser → 0% IA
               </button>
             </div>
           </div>
         )}
 
-        {/* ── HUMANIZING ── */}
+        {/* ══ HUMANIZING ═════════════════════════════════════════ */}
         {step === "humanizing" && (
-          <div className="max-w-md mx-auto text-center py-24 space-y-8">
-            <div className="relative w-28 h-28 mx-auto">
-              <div className="absolute inset-0 rounded-full bg-emerald-500/10" />
-              <div className="absolute inset-2 rounded-full border-2 border-emerald-500/30 border-t-emerald-400 animate-spin" />
-              <div className="absolute inset-5 rounded-full border-2 border-cyan-500/20 border-t-cyan-400 animate-spin" style={{ animationDirection: "reverse", animationDuration: "1.5s" }} />
-              <div className="absolute inset-0 flex items-center justify-center text-3xl">✨</div>
+          <div className="animate-fade-in" style={{ textAlign: "center", padding: "80px 0" }}>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+              <Spinner color="var(--success)" />
             </div>
-            <div>
-              <h2 className="text-2xl font-bold mb-2">Humanisation en cours…</h2>
-              <p className="text-gray-500 text-sm">Claude réécrit votre texte avec un style naturel et authentique</p>
-            </div>
-            <div className="flex items-center justify-center gap-1">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
-              ))}
-            </div>
+            <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 22, margin: "0 0 8px", color: "var(--text-1)" }}>
+              Humanisation en cours…
+            </h2>
+            <p style={{ color: "var(--text-3)", fontSize: 14, margin: 0 }}>Claude réécrit votre texte avec un style naturel</p>
           </div>
         )}
 
-        {/* ── HUMANIZED ── */}
+        {/* ══ HUMANIZED ══════════════════════════════════════════ */}
         {step === "humanized" && (
-          <div className="max-w-3xl mx-auto space-y-5">
+          <div style={{ maxWidth: 780, margin: "0 auto" }}>
+
             {/* Success banner */}
-            <div className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
-              <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold">✓</div>
+            <div className="animate-scale-in" style={{
+              padding: "14px 20px", borderRadius: "var(--r-lg)",
+              background: "var(--success-bg)", border: "1px solid #bbf7d0",
+              display: "flex", alignItems: "center", gap: 12, marginBottom: 24,
+            }}>
+              <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <span style={{ color: "var(--success)", fontSize: 14, fontWeight: 700 }}>✓</span>
+              </div>
               <div>
-                <div className="text-sm font-semibold text-emerald-300">Humanisation réussie</div>
-                <div className="text-xs text-emerald-600">Votre texte a été réécrit pour passer indétecté par les outils IA</div>
+                <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 14, color: "var(--success)" }}>Humanisation réussie</div>
+                <div style={{ fontSize: 12, color: "#4ade80" }}>Réécrit pour passer les détecteurs IA</div>
               </div>
             </div>
 
             {/* Before / After */}
-            <div className="grid sm:grid-cols-2 gap-3">
-              <div className="glass rounded-2xl p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-red-400" />
-                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Original</span>
+            <div className="animate-fade-up" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+              <div className="card" style={{ padding: "20px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--error)", display: "inline-block" }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.08em", textTransform: "uppercase" }}>Original</span>
                   </div>
-                  {detection && (
-                    <span className="text-xs font-mono text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">
-                      {detection.percentage}% IA
-                    </span>
-                  )}
+                  {result && <Badge label={`${result.percentage}% IA`} variant="warn" />}
                 </div>
-                <p className="text-sm text-gray-500 leading-relaxed line-clamp-8">{text}</p>
+                <p style={{ fontSize: 13, color: "var(--text-3)", lineHeight: 1.7, margin: 0, display: "-webkit-box", WebkitLineClamp: 6, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                  {text}
+                </p>
               </div>
 
-              <div className="glass rounded-2xl p-5 space-y-3 border-emerald-500/20 bg-emerald-500/[0.03]">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Humanisé</span>
+              <div className="card" style={{ padding: "20px", borderColor: "#bbf7d0", background: "#fafffe" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--success)", display: "inline-block" }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.08em", textTransform: "uppercase" }}>Humanisé</span>
                   </div>
-                  <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                    ~0% IA
-                  </span>
+                  <Badge label="~0% IA" variant="success" />
                 </div>
-                <p className="text-sm text-gray-300 leading-relaxed line-clamp-8">{humanizedText}</p>
+                <p style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.7, margin: 0, display: "-webkit-box", WebkitLineClamp: 6, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                  {humanized}
+                </p>
               </div>
             </div>
 
-            {/* Full editable output */}
-            <div className="glass rounded-2xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
-                <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Texte complet</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => copy(humanizedText)}
-                    className="text-xs text-gray-500 hover:text-gray-200 px-3 py-1 rounded-lg hover:bg-white/5 transition-all"
-                  >
-                    Copier
-                  </button>
-                  <button
-                    onClick={() => download(humanizedText, "texte-humanise.txt")}
-                    className="text-xs text-violet-400 hover:text-violet-200 px-3 py-1 rounded-lg hover:bg-violet-500/10 transition-all"
-                  >
-                    ↓ Télécharger
-                  </button>
+            {/* Editable output */}
+            <div className="animate-fade-up stagger-1 card" style={{ marginBottom: 16, overflow: "hidden" }}>
+              <div style={{
+                padding: "10px 16px", borderBottom: "1px solid var(--border-soft)",
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+              }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.08em", textTransform: "uppercase" }}>Texte complet</span>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button onClick={() => copy(humanized)} className="btn-ghost" style={{ padding: "4px 12px", fontSize: 12 }}>Copier</button>
+                  <button onClick={() => dl(humanized)} className="btn-ghost" style={{ padding: "4px 12px", fontSize: 12, color: "var(--accent)", borderColor: "#c7d2fe" }}>↓ Télécharger</button>
                 </div>
               </div>
               <textarea
-                value={humanizedText}
-                onChange={(e) => setHumanizedText(e.target.value)}
-                className="w-full h-60 bg-transparent p-4 text-gray-200 text-sm leading-7 resize-none focus:outline-none"
+                value={humanized}
+                onChange={(e) => setHumanized(e.target.value)}
+                style={{
+                  width: "100%", height: 220, padding: "16px",
+                  background: "transparent", border: "none", outline: "none", resize: "none",
+                  fontSize: 14, color: "var(--text-1)", lineHeight: 1.75,
+                  fontFamily: "var(--font-body)",
+                }}
               />
             </div>
 
-            {/* Actions */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={handleReset}
-                className="py-3.5 rounded-2xl text-sm font-medium glass glass-hover text-gray-300 hover:text-white transition-all"
-              >
+            <div className="animate-fade-up stagger-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <button className="btn-ghost" onClick={reset} style={{ padding: "14px", fontSize: 14 }}>
                 Nouveau texte
               </button>
-              <button
-                onClick={handleVerify}
-                className="py-3.5 rounded-2xl text-sm font-semibold bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
-              >
-                <span>🔍</span> Vérifier le score
+              <button className="btn-accent" onClick={verify} style={{ padding: "14px", fontSize: 14 }}>
+                🔍 Vérifier le score
               </button>
             </div>
           </div>
@@ -601,8 +561,8 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-white/[0.04] mt-16">
-        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between text-xs text-gray-600">
+      <footer style={{ borderTop: "1px solid var(--border)", padding: "16px 24px" }}>
+        <div style={{ maxWidth: 900, margin: "0 auto", display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text-3)" }}>
           <span>BuyVerify © 2026</span>
           <span>Propulsé par Claude AI</span>
         </div>

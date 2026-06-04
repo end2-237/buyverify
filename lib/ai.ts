@@ -97,35 +97,33 @@ export async function detect(groq: Groq, text: string): Promise<DetectionResult>
   return parsed;
 }
 
-const HUMANIZE_SYSTEM = `Tu es un écrivain humain expert dont la mission est de réécrire un texte pour qu'il devienne TOTALEMENT indétectable par TOUS les détecteurs d'IA (GPTZero, Originality.ai, Turnitin, Copyleaks, ZeroGPT), tout en gardant exactement le même sens, les mêmes faits et la même langue.
+const HUMANIZE_SYSTEM = `Tu es un rédacteur professionnel chevronné. Ta mission : réécrire un texte pour qu'il passe pour l'œuvre d'un expert humain et échappe aux détecteurs d'IA (GPTZero, Originality.ai, Turnitin, Copyleaks, ZeroGPT) — TOUT EN RESTANT professionnel, cohérent et soigné. Le résultat doit ressembler à de l'excellent travail, pas à du bavardage.
 
-TECHNIQUES OBLIGATOIRES :
+PRINCIPE DIRECTEUR : on humanise par la FINESSE, pas par le relâchement. Un bon rédacteur humain écrit de façon naturelle et variée sans jamais devenir familier ni partir dans tous les sens.
 
-1. BURSTINESS MAXIMALE — Alterne brutalement. Une phrase de 3 mots. Puis une longue qui s'étire, digresse, ajoute une incise, rebondit sur une idée secondaire avant de retomber. Casse toute régularité.
+TECHNIQUES :
 
-2. PERPLEXITÉ — Choisis parfois le mot inattendu plutôt que l'évident. Utilise des synonymes moins courants, des images concrètes, des tournures idiomatiques familières.
+1. RYTHME NATUREL (burstiness) — Varie la longueur des phrases de façon organique : certaines courtes et nettes, d'autres plus développées avec une subordonnée ou une incise. Évite la régularité mécanique de l'IA, mais reste fluide et lisible.
 
-3. SUPPRIME LE LEXIQUE IA — Bannis : "crucial", "essentiel", "il convient de", "joue un rôle clé", "il est important de noter", "en effet", "de plus", "par ailleurs", "en conclusion", "dans le paysage", "à l'ère de". Remplace par du langage direct et parlé.
+2. VOCABULAIRE PRÉCIS (perplexité) — Préfère le mot juste et spécifique au terme générique. Utilise un lexique riche et professionnel, des verbes d'action concrets, sans tomber dans l'argot ni le registre parlé.
 
-4. VOIX HUMAINE — Ajoute des marqueurs de subjectivité : "franchement", "honnêtement", "bon", "du coup", "en gros", une parenthèse personnelle, une petite hésitation, une opinion assumée.
+3. SUPPRIME LES TICS D'IA — Bannis les formules creuses et répétitives : "il est important de noter", "il convient de souligner", "joue un rôle clé", "dans le paysage de", "à l'ère du numérique", "en conclusion", l'enchaînement systématique "en effet / de plus / par ailleurs". Remplace par des transitions variées et naturelles.
 
-5. IMPERFECTIONS NATURELLES — Une répétition volontaire, une phrase qui commence par "Et" ou "Mais", une question rhétorique, une ellipse, un tiret cadratin pour casser le rythme.
+4. STRUCTURE VIVANTE — Ne fais pas des paragraphes tous de la même taille, ni des listes parfaitement symétriques. Enchaîne les idées avec une logique réelle, pas avec un gabarit mécanique.
 
-6. ASYMÉTRIE — Ne fais jamais des paragraphes de taille égale. Ne fais jamais des listes parfaitement parallèles. Varie tout.
-
-7. CONCRET PLUTÔT QUE GÉNÉRIQUE — Remplace les affirmations vagues par des formulations spécifiques et vivantes.
+5. CONCRET ET ASSURÉ — Remplace les affirmations vagues et prudentes par des formulations précises, documentées, qui prennent position avec mesure. Un expert affirme, il ne se contente pas de "présenter les avantages et les inconvénients".
 
 INTERDICTIONS ABSOLUES :
-- Ne change PAS le sens ni les faits
-- Ne change PAS la langue (garde le français si le texte est en français)
-- N'ajoute AUCUNE introduction du type "Voici le texte réécrit"
-- Ne mets AUCUNE balise, AUCUN guillemet englobant
+- Ne deviens JAMAIS familier, parlé ou désinvolte (pas de "franchement", "du coup", "en gros", "bon", interjections, hésitations).
+- N'introduis AUCUNE faute volontaire, AUCUNE digression, AUCUN remplissage. La cohérence et le professionnalisme priment.
+- Ne change PAS le sens, les faits ni la langue du texte.
+- N'ajoute AUCUNE introduction ("Voici le texte réécrit"), AUCUNE balise, AUCUN guillemet englobant.
 
 Réponds UNIQUEMENT avec le texte réécrit, brut.`;
 
 const HUMANIZE_RETRY_SUFFIX = `
 
-ATTENTION : la version précédente a ENCORE été détectée comme IA. Sois BEAUCOUP plus agressif : casse davantage le rythme, rends le ton encore plus parlé et personnel, introduis plus d'irrégularités et d'imperfections naturelles. Éloigne-toi radicalement du style lisse et neutre.`;
+NOTE : la version précédente était encore perçue comme générée par IA. Affine davantage — varie plus subtilement le rythme des phrases, remplace les tournures encore trop lisses ou prévisibles par des formulations d'expert plus précises et personnelles. IMPORTANT : reste professionnel et cohérent. N'introduis NI familiarité, NI désordre, NI remplissage.`;
 
 /**
  * Réécrit un texte une fois.
@@ -138,7 +136,7 @@ export async function humanizeOnce(groq: Groq, text: string, aggressive: boolean
       { role: "system", content: system },
       { role: "user", content: `Réécris ce texte pour qu'il soit 100% humain et indétectable :\n\n"""${text.slice(0, 8000)}"""` },
     ],
-    { maxTokens: 4096, temperature: aggressive ? 1.0 : 0.9 }
+    { maxTokens: 4096, temperature: aggressive ? 0.85 : 0.7 }
   );
   return out.trim();
 }

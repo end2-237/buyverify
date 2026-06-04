@@ -320,6 +320,8 @@ export default function Home() {
   const [text, setText] = useState("");
   const [humanized, setHumanized] = useState("");
   const [result, setResult] = useState<DetectionResult | null>(null);
+  const [finalScore, setFinalScore] = useState<number | null>(null);
+  const [iterations, setIterations] = useState(0);
   const [step, setStep] = useState<Step>("input");
   const [error, setError] = useState("");
 
@@ -343,11 +345,14 @@ export default function Home() {
       if (!raw) throw new Error("Réponse vide du serveur (vérifiez la clé GROQ_API_KEY).");
       const d = JSON.parse(raw);
       if (d.error) throw new Error(d.error);
-      setHumanized(d.humanizedText); setStep("humanized");
+      setHumanized(d.humanizedText);
+      setFinalScore(typeof d.finalScore === "number" ? d.finalScore : null);
+      setIterations(typeof d.iterations === "number" ? d.iterations : 0);
+      setStep("humanized");
     } catch (e) { setError((e as Error).message); setStep("result"); }
   };
 
-  const reset = () => { setText(""); setHumanized(""); setResult(null); setStep("input"); setError(""); };
+  const reset = () => { setText(""); setHumanized(""); setResult(null); setFinalScore(null); setIterations(0); setStep("input"); setError(""); };
   const verify = () => { const t = humanized; setText(t); setHumanized(""); setResult(null); detect(t); };
   const copy = (s: string) => navigator.clipboard.writeText(s);
   const dl = (s: string) => {
@@ -617,7 +622,7 @@ export default function Home() {
         {/* ══ HUMANIZING ═════════════════════════════════════ */}
         {step === "humanizing" && (
           <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px" }}>
-            <LoadingView label="Humanisation en cours…" sub="Groq Kimi K2 réécrit votre texte avec un style naturel et authentique" />
+            <LoadingView label="Humanisation en cours…" sub="Réécriture, vérification du score, puis nouvelle passe jusqu'à atteindre ~0% IA" />
           </div>
         )}
 
@@ -628,11 +633,13 @@ export default function Home() {
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "var(--success)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Humanisation réussie</div>
                 <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 36, letterSpacing: "-0.03em", color: "var(--text-1)" }}>Votre texte réécrit</h2>
-                <p style={{ fontSize: 15, color: "var(--text-2)", marginTop: 10 }}>Indétectable par les outils IA, sens préservé.</p>
+                <p style={{ fontSize: 15, color: "var(--text-2)", marginTop: 10 }}>
+                  Indétectable par les outils IA, sens préservé{iterations > 0 ? ` — ${iterations} passe${iterations > 1 ? "s" : ""} de réécriture et vérification.` : "."}
+                </p>
               </div>
               <div style={{ padding: "10px 20px", borderRadius: 12, background: "var(--success-bg)", border: "1px solid var(--success-border)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                 <svg width="14" height="14" fill="none" stroke="var(--success)" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--success)" }}>~0% IA</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--success)" }}>{finalScore !== null ? `${finalScore}% IA` : "~0% IA"}</span>
               </div>
             </div>
 
@@ -654,7 +661,7 @@ export default function Home() {
                     <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--success)" }} />
                     <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Humanisé</span>
                   </div>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--success)", background: "var(--success-bg)", border: "1px solid var(--success-border)", padding: "2px 10px", borderRadius: 99 }}>~0% IA</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--success)", background: "var(--success-bg)", border: "1px solid var(--success-border)", padding: "2px 10px", borderRadius: 99 }}>{finalScore !== null ? `${finalScore}% IA` : "~0% IA"}</span>
                 </div>
                 <p style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.75, display: "-webkit-box", WebkitLineClamp: 8, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{humanized}</p>
               </div>

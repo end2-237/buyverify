@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
-// Most capable & precise model on Groq as of 2026
 const MODEL = "moonshotai/kimi-k2-instruct";
 
 export async function POST(req: NextRequest) {
+  const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
   try {
     const { text } = await req.json();
 

@@ -281,7 +281,7 @@ function PricingCard({
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: accent ? "rgba(255,255,255,0.4)" : "var(--text-3)", marginBottom: 16 }}>{tier}</div>
 
       <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 6 }}>
-        <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 44, letterSpacing: "-0.05em", color: accent ? "#fff" : "var(--text-1)", lineHeight: 1 }}>{price}</span>
+        <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: price.length > 6 ? 26 : 44, letterSpacing: "-0.03em", color: accent ? "#fff" : "var(--text-1)", lineHeight: 1 }}>{price}</span>
         {period && <span style={{ fontSize: 14, color: accent ? "rgba(255,255,255,0.4)" : "var(--text-3)" }}>{period}</span>}
       </div>
 
@@ -371,7 +371,10 @@ export default function Home() {
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
               </svg>
             </div>
-            <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 15, letterSpacing: "-0.02em", color: "var(--text-1)" }}>BuyVerify</span>
+            <div>
+              <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 15, letterSpacing: "-0.02em", color: "var(--text-1)" }}>BuyVerify</span>
+              <span style={{ fontSize: 10, color: "var(--text-3)", marginLeft: 6 }}>by <a href="https://buyticle.com/" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 600 }}>Buyticle</a></span>
+            </div>
           </div>
           <nav style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {step !== "input" && (
@@ -500,19 +503,19 @@ export default function Home() {
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20, alignItems: "end" }}>
                 <PricingCard
-                  tier="Gratuit" price="0€" period="/mois"
+                  tier="Gratuit" price="0 FCFA" period="/mois"
                   description="Pour découvrir et tester BuyVerify sans engagement."
                   features={["5 analyses / jour", "Détection IA basique", "Texte jusqu'à 1 000 mots", "Export .txt"]}
                   cta="Commencer gratuitement" accent={false} delay={0}
                 />
                 <PricingCard
-                  tier="Pro" price="12€" period="/mois"
+                  tier="Pro" price="7 900 FCFA" period="/mois"
                   description="Pour les professionnels qui produisent du contenu régulièrement."
                   features={["Analyses illimitées", "Humanisation illimitée", "PDF · DOCX · TXT", "Vérification post-humanisation", "Modèle Groq Kimi K2", "Support prioritaire"]}
                   cta="Démarrer l'essai 7 jours" accent={true} delay={80}
                 />
                 <PricingCard
-                  tier="Entreprise" price="49€" period="/mois"
+                  tier="Entreprise" price="32 000 FCFA" period="/mois"
                   description="Pour les équipes qui ont besoin de volume et d'intégrations."
                   features={["Tout le plan Pro", "API REST dédiée", "10 utilisateurs inclus", "Tableau de bord d'équipe", "Facturation annuelle disponible", "SLA 99.9%"]}
                   cta="Contacter l'équipe" accent={false} delay={160}
@@ -679,10 +682,70 @@ export default function Home() {
       </div>
 
       {/* Footer */}
-      <footer style={{ position: "relative", zIndex: 1, borderTop: "1px solid var(--border)", padding: "20px 32px", background: "rgba(240,240,242,0.8)", backdropFilter: "blur(12px)" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 12, color: "var(--text-3)" }}>BuyVerify © 2026</span>
-          <span style={{ fontSize: 12, color: "var(--text-3)" }}>Groq · Kimi K2 · moonshotai</span>
+      <footer style={{ position: "relative", zIndex: 1, borderTop: "1px solid var(--border)", background: "rgba(240,240,242,0.9)", backdropFilter: "blur(12px)" }}>
+        {/* Main footer */}
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "40px 32px 32px", display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 48 }}>
+          {/* Brand */}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <div style={{ width: 28, height: 28, borderRadius: 7, background: "var(--text-1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="13" height="13" fill="none" stroke="white" strokeWidth="2.2" viewBox="0 0 24 24">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+              </div>
+              <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 15, letterSpacing: "-0.02em", color: "var(--text-1)" }}>BuyVerify</span>
+            </div>
+            <p style={{ fontSize: 13, color: "var(--text-3)", lineHeight: 1.7, maxWidth: 280, marginBottom: 16 }}>
+              Détectez et humanisez vos textes IA en quelques secondes. Une solution <a href="https://buyticle.com/" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}>Buyticle</a>.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <a href="tel:+237696995879" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-2)", textDecoration: "none" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "var(--text-2)")}>
+                <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.8a19.79 19.79 0 01-3.07-8.67A2 2 0 012 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14.93z"/>
+                </svg>
+                +237 696 995 879
+              </a>
+              <a href="mailto:contact@buyticle.com" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-2)", textDecoration: "none" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "var(--text-2)")}>
+                <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                  <polyline points="22,6 12,13 2,6"/>
+                </svg>
+                contact@buyticle.com
+              </a>
+            </div>
+          </div>
+
+          {/* Produit */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 16 }}>Produit</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {["Détection IA", "Humanisation", "Tarifs", "API"].map(l => (
+                <span key={l} style={{ fontSize: 13, color: "var(--text-2)", cursor: "pointer" }}>{l}</span>
+              ))}
+            </div>
+          </div>
+
+          {/* Légal */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 16 }}>Légal</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {["Conditions d'utilisation", "Politique de confidentialité", "Mentions légales"].map(l => (
+                <span key={l} style={{ fontSize: 13, color: "var(--text-2)", cursor: "pointer" }}>{l}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom bar */}
+        <div style={{ borderTop: "1px solid var(--border)", padding: "14px 32px" }}>
+          <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <span style={{ fontSize: 12, color: "var(--text-3)" }}>© 2026 BuyVerify — Une solution <a href="https://buyticle.com/" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 600 }}>Buyticle</a></span>
+            <span style={{ fontSize: 12, color: "var(--text-3)" }}>Groq · Kimi K2 · moonshotai</span>
+          </div>
         </div>
       </footer>
     </div>

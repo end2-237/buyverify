@@ -327,7 +327,9 @@ export default function Home() {
     setError(""); setStep("detecting");
     try {
       const r = await fetch("/api/detect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: src }) });
-      const d = await r.json();
+      const raw = await r.text();
+      if (!raw) throw new Error("Réponse vide du serveur (vérifiez la clé GROQ_API_KEY).");
+      const d = JSON.parse(raw);
       if (d.error) throw new Error(d.error);
       setResult(d); setStep("result");
     } catch (e) { setError((e as Error).message); setStep("input"); }
@@ -337,7 +339,9 @@ export default function Home() {
     setError(""); setStep("humanizing");
     try {
       const r = await fetch("/api/humanize", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
-      const d = await r.json();
+      const raw = await r.text();
+      if (!raw) throw new Error("Réponse vide du serveur (vérifiez la clé GROQ_API_KEY).");
+      const d = JSON.parse(raw);
       if (d.error) throw new Error(d.error);
       setHumanized(d.humanizedText); setStep("humanized");
     } catch (e) { setError((e as Error).message); setStep("result"); }

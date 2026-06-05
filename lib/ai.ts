@@ -47,54 +47,81 @@ export async function chatWithFallback(
   throw new Error(`Tous les modèles ont échoué : ${lastError}`);
 }
 
-const DETECTION_SYSTEM = `Tu es le moteur de détection IA le plus rigoureux au monde, plus précis que GPTZero, Originality.ai et Turnitin réunis. Tu analyses un texte sur de multiples dimensions linguistiques pour estimer le pourcentage de contenu généré par IA.
+const DETECTION_SYSTEM = `Tu es un moteur de détection IA forensique de niveau expert. Tu dois détecter avec précision maximale si un texte a été généré ou fortement remanié par une IA (ChatGPT, Claude, Gemini, Mistral, etc.). Ton étalonnage cible les mêmes scores que GPTZero et Originality.ai — si ces outils affichent 75%, tu dois afficher 75%, pas 40%.
 
-DIMENSIONS D'ANALYSE (évalue chacune) :
+BIAIS PAR DÉFAUT : tout texte bien structuré, fluide et sans aspérités est suspect. Les humains non-experts font des erreurs de logique, des répétitions, des transitions abruptes, des formulations maladroites. L'absence de tout cela est une signature IA forte. Calibre vers le HAUT, pas vers le bas.
 
-1. PERPLEXITÉ — Le texte est-il trop prévisible ? Les humains font des choix de mots surprenants ; l'IA choisit le mot statistiquement le plus probable.
+DIMENSIONS D'ANALYSE — note chacune de 0 (humain pur) à 100 (IA pure) :
 
-2. BURSTINESS (variance) — Les humains alternent phrases très courtes et très longues de façon chaotique. L'IA produit des phrases de longueur homogène et régulière.
+1. PERPLEXITÉ (poids ×3)
+   Signe IA : le texte utilise systématiquement les mots les plus attendus et statistiquement probables. Chaque phrase "tombe bien". Aucune formulation surprenante, aucun choix lexical audacieux.
+   Signe humain : choix de mots parfois inattendus, tournures personnelles, expressions idiomatiques non-standard.
 
-3. STRUCTURE & TRANSITIONS — L'IA abuse de "En effet", "De plus", "Par ailleurs", "Il est important de noter", "En conclusion", listes parfaitement parallèles, paragraphes de taille égale.
+2. BURSTINESS / VARIANCE DES PHRASES (poids ×3)
+   Signe IA : longueur des phrases très homogène (écart-type faible). Même tempo sur tout le texte.
+   Signe humain : alternance irrégulière et chaotique — une phrase de 4 mots, puis une de 40, puis une de 12. La variance est élevée et imprévisible.
 
-4. LEXIQUE RÉVÉLATEUR — Mots/tournures typiques de l'IA : "crucial", "essentiel", "il convient de", "joue un rôle", "dans le paysage de", "à l'ère du numérique", "plonger dans", "tapisserie", "témoignage de", "naviguer", emphase excessive.
+3. LEXIQUE GÉNÉRIQUE IA (poids ×2)
+   Mots et tournures quasi-exclusivement utilisés par les IA en français : "crucial", "essentiel", "il est important de noter", "il convient de souligner", "joue un rôle clé", "joue un rôle fondamental", "dans le paysage de", "à l'ère du numérique", "permet de", "offre la possibilité de", "en conclusion", "en somme", "en définitive", "par ailleurs", "de plus", "en outre", "il en résulte que", "force est de constater", "il va sans dire", "témoignage de", "naviguer dans", "plonger dans", "tapisserie".
+   Score : 1 occurrence = +8 pts, 3+ occurrences = score minimum 50.
 
-5. PERFECTION ANORMALE — Absence totale de fautes, de digressions, de répétitions involontaires, d'opinions tranchées, d'humour, d'argot, de références personnelles concrètes.
+4. STRUCTURE TEMPLATE (poids ×2)
+   Signe IA : introduction-développement-conclusion rigide, paragraphes de taille quasi-égale, listes à puces parfaitement parallèles et équilibrées, chaque paragraphe commence par une phrase-thèse suivie d'exemples puis d'une phrase de transition.
+   Signe humain : structure irrégulière, idées qui dérapent ou s'enchaînent de façon non-linéaire.
 
-6. PLATITUDE SÉMANTIQUE — Affirmations génériques, équilibrées, sans prise de risque, qui pourraient s'appliquer à n'importe quel contexte ("présente des avantages et des inconvénients").
+5. PERFECTION ASEPTISÉE (poids ×2)
+   Signe IA : zéro faute de syntaxe, zéro répétition involontaire, zéro parenthèse personnelle, zéro opinion tranchée, zéro référence concrète et vérifiable, zéro humour, zéro ironie, zéro hésitation.
+   Signe humain : au moins quelques-uns de ces éléments présents.
 
-7. RYTHME ÉMOTIONNEL — Les humains ont des montées et descentes d'intensité ; l'IA reste plate et neutre.
+6. PLATITUDE SÉMANTIQUE (poids ×1)
+   Signe IA : affirmations vraies-de-partout, propos qui "ne froissent personne", équilibre systématique des points de vue, absence de prise de risque intellectuelle.
 
-MÉTHODE : note chaque dimension mentalement de 0 (humain) à 100 (IA), puis calcule une moyenne pondérée. La burstiness et la perplexité comptent double.
+7. COHÉRENCE HYPERBOLIQUE (poids ×1)
+   Signe IA : le texte est TROP cohérent. Chaque phrase prépare la suivante. Aucun saut de pensée, aucun retour en arrière, aucune incohérence mineure. Les humains font des allers-retours.
 
-Sois SÉVÈRE : un texte poli et générique est presque toujours de l'IA. Ne sois indulgent que si tu vois de vraies marques humaines (fautes, ton personnel, irrégularité forte).
+CALCUL : moyenne pondérée des 7 dimensions. Arrondis à l'entier.
+
+RÈGLES DE CALIBRATION OBLIGATOIRES :
+- Si le texte contient ≥3 marqueurs lexicaux IA listés ci-dessus → score minimum 55.
+- Si la structure est parfaitement template ET la burstiness est faible → score minimum 60.
+- Si TOUTES les dimensions sont ≥ 50 → score minimum 75.
+- Ne donne JAMAIS un score < 30 pour un texte fluide, bien structuré et sans aspérités visibles.
+- Réserve 0–15% pour les textes avec des fautes réelles, un style personnel marqué, ou une irrégularité structurelle forte et évidente.
 
 Réponds UNIQUEMENT en JSON valide, sans markdown :
-{"percentage":<entier 0-100>,"confidence":"<faible|moyenne|élevée>","indicators":["<indicateur précis et concret>", ...],"summary":"<2 phrases expliquant le verdict>"}`;
+{"percentage":<entier 0-100>,"confidence":"<faible|moyenne|élevée>","indicators":["<indicateur précis et concret, cite des extraits du texte>", ...],"summary":"<2 phrases expliquant le verdict avec les éléments détectés>"}`;
 
-/**
- * Détecte le taux d'IA d'un texte.
- */
-export async function detect(groq: Groq, text: string): Promise<DetectionResult> {
+async function detectOnce(groq: Groq, text: string): Promise<DetectionResult> {
   const raw = await chatWithFallback(
     groq,
     [
       { role: "system", content: DETECTION_SYSTEM },
-      { role: "user", content: `Analyse ce texte avec la plus grande rigueur :\n\n"""${text.slice(0, 8000)}"""` },
+      {
+        role: "user",
+        content: `Analyse ce texte avec rigueur forensique. Rappel : calibre tes scores pour correspondre aux résultats de GPTZero et Originality.ai — ne sous-estime pas.\n\n"""${text.slice(0, 8000)}"""`,
+      },
     ],
-    { maxTokens: 1024, temperature: 0, jsonMode: true }
+    { maxTokens: 1200, temperature: 0, jsonMode: true }
   );
 
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) throw new Error("JSON introuvable dans la réponse de détection");
   const parsed = JSON.parse(match[0]) as DetectionResult;
-
-  // Garde-fous
   parsed.percentage = Math.max(0, Math.min(100, Math.round(parsed.percentage)));
   if (!Array.isArray(parsed.indicators)) parsed.indicators = [];
   if (!parsed.confidence) parsed.confidence = "moyenne";
   if (!parsed.summary) parsed.summary = "";
   return parsed;
+}
+
+/**
+ * Détecte le taux d'IA — double passe pour stabilité, on prend le max.
+ */
+export async function detect(groq: Groq, text: string): Promise<DetectionResult> {
+  const [a, b] = await Promise.all([detectOnce(groq, text), detectOnce(groq, text)]);
+  // On prend le score le plus élevé des deux passes (calibration haute)
+  if (a.percentage >= b.percentage) return a;
+  return b;
 }
 
 const HUMANIZE_SYSTEM = `Tu es un rédacteur professionnel chevronné. Ta mission : réécrire un texte pour qu'il passe pour l'œuvre d'un expert humain et échappe aux détecteurs d'IA (GPTZero, Originality.ai, Turnitin, Copyleaks, ZeroGPT) — TOUT EN RESTANT professionnel, cohérent et soigné. Le résultat doit ressembler à de l'excellent travail, pas à du bavardage.

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClient, humanizeToTarget, readText } from "@/lib/ai";
 
-// L'humanisation itérative peut prendre plusieurs appels — on alloue large.
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {

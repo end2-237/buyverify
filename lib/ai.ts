@@ -153,19 +153,79 @@ const HUMANIZE_RETRY_SUFFIX = `
 NOTE : la version précédente était encore perçue comme générée par IA. Affine davantage — varie plus subtilement le rythme des phrases, remplace les tournures encore trop lisses ou prévisibles par des formulations d'expert plus précises et personnelles. IMPORTANT : reste professionnel et cohérent. N'introduis NI familiarité, NI désordre, NI remplissage.`;
 
 /**
- * Réécrit un texte une fois.
+ * Découpe un texte en morceaux qui respectent les frontières de paragraphes
+ * (puis de phrases si besoin), sans jamais couper un mot. Préserve la totalité
+ * du contenu — rien n'est tronqué.
  */
-export async function humanizeOnce(groq: Groq, text: string, aggressive: boolean): Promise<string> {
+export function chunkText(text: string, maxChars = 3500): string[] {
+  if (text.length <= maxChars) return [text];
+
+  const paragraphs = text.split(/\n\s*\n/);
+  const chunks: string[] = [];
+  let buffer = "";
+
+  const pushBuffer = () => {
+    if (buffer.trim()) chunks.push(buffer.trim());
+    buffer = "";
+  };
+
+  for (const para of paragraphs) {
+    // Un paragraphe seul dépasse la limite → on le découpe par phrases.
+    if (para.length > maxChars) {
+      pushBuffer();
+      const sentences = para.match(/[^.!?]+[.!?]+[\s]*|[^.!?]+$/g) ?? [para];
+      let sBuf = "";
+      for (const s of sentences) {
+        if ((sBuf + s).length > maxChars && sBuf) {
+          chunks.push(sBuf.trim());
+          sBuf = "";
+        }
+        sBuf += s;
+      }
+      if (sBuf.trim()) chunks.push(sBuf.trim());
+      continue;
+    }
+
+    if ((buffer + "\n\n" + para).length > maxChars && buffer) {
+      pushBuffer();
+    }
+    buffer = buffer ? buffer + "\n\n" + para : para;
+  }
+  pushBuffer();
+  return chunks;
+}
+
+/**
+ * Réécrit UN segment de texte (sans troncature).
+ */
+async function humanizeChunk(groq: Groq, chunk: string, aggressive: boolean): Promise<string> {
   const system = aggressive ? HUMANIZE_SYSTEM + HUMANIZE_RETRY_SUFFIX : HUMANIZE_SYSTEM;
   const out = await chatWithFallback(
     groq,
     [
       { role: "system", content: system },
-      { role: "user", content: `Réécris ce texte pour qu'il soit 100% humain et indétectable :\n\n"""${text.slice(0, 8000)}"""` },
+      {
+        role: "user",
+        content: `Réécris ce passage pour qu'il soit 100% humain et indétectable. GARDE LA MÊME LONGUEUR (ne résume pas, ne raccourcis pas, ne supprime aucune idée — conserve tout le contenu et tous les détails) :\n\n"""${chunk}"""`,
+      },
     ],
-    { maxTokens: 4096, temperature: aggressive ? 0.85 : 0.7 }
+    { maxTokens: 8000, temperature: aggressive ? 0.85 : 0.7 }
   );
   return out.trim();
+}
+
+/**
+ * Réécrit un texte complet une fois — en le découpant en segments pour
+ * préserver toute sa longueur, même sur des documents de plusieurs pages.
+ */
+export async function humanizeOnce(groq: Groq, text: string, aggressive: boolean): Promise<string> {
+  const chunks = chunkText(text);
+  if (chunks.length === 1) {
+    return humanizeChunk(groq, chunks[0], aggressive);
+  }
+  // Traite les segments en parallèle pour rester dans les limites de temps.
+  const rewritten = await Promise.all(chunks.map((c) => humanizeChunk(groq, c, aggressive)));
+  return rewritten.join("\n\n");
 }
 
 export interface HumanizeResult {

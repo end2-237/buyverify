@@ -3,8 +3,8 @@ import Groq from "groq-sdk";
 // Modèles par ordre de puissance — fallback automatique
 export const MODELS = [
   "llama-3.3-70b-versatile",
-  "llama3-70b-8192",
-  "llama3-8b-8192",
+  "openai/gpt-oss-120b",
+  "llama-3.1-8b-instant",
 ];
 
 export interface DetectionResult {

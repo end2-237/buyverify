@@ -91,6 +91,19 @@ RÈGLES DE CALIBRATION OBLIGATOIRES :
 Réponds UNIQUEMENT en JSON valide, sans markdown :
 {"percentage":<entier 0-100>,"confidence":"<faible|moyenne|élevée>","indicators":["<indicateur précis et concret, cite des extraits du texte>", ...],"summary":"<2 phrases expliquant le verdict avec les éléments détectés>"}`;
 
+/** Transforme un indicateur (chaîne ou objet) en une seule ligne de texte lisible. */
+function normalizeIndicator(it: unknown): string {
+  if (typeof it === "string") return it.trim();
+  if (it && typeof it === "object") {
+    const o = it as Record<string, unknown>;
+    const label = o.indicateur ?? o.indicator ?? o.dimension ?? o.description ?? o.text;
+    const score = o.score;
+    const text = typeof label === "string" ? label : JSON.stringify(it);
+    return score !== undefined ? `${text} (${score})` : text;
+  }
+  return String(it ?? "").trim();
+}
+
 async function detectOnce(groq: Groq, text: string): Promise<DetectionResult> {
   const raw = await chatWithFallback(
     groq,
@@ -108,9 +121,11 @@ async function detectOnce(groq: Groq, text: string): Promise<DetectionResult> {
   if (!match) throw new Error("JSON introuvable dans la réponse de détection");
   const parsed = JSON.parse(match[0]) as DetectionResult;
   parsed.percentage = Math.max(0, Math.min(100, Math.round(parsed.percentage)));
-  if (!Array.isArray(parsed.indicators)) parsed.indicators = [];
+  // Le modèle renvoie parfois des objets au lieu de chaînes → on aplatit en texte.
+  const rawIndicators = Array.isArray(parsed.indicators) ? parsed.indicators : [];
+  parsed.indicators = rawIndicators.map((it) => normalizeIndicator(it)).filter(Boolean);
   if (!parsed.confidence) parsed.confidence = "moyenne";
-  if (!parsed.summary) parsed.summary = "";
+  if (typeof parsed.summary !== "string") parsed.summary = parsed.summary ? String(parsed.summary) : "";
   return parsed;
 }
 

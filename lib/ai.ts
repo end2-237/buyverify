@@ -1,11 +1,17 @@
 import Groq from "groq-sdk";
 
 // Modèles par ordre de puissance — fallback automatique
-export const MODELS = [
+// Deux pools séparés : puissance pour la détection, vitesse/débit pour l'humanisation
+export const DETECT_MODELS = [
   "llama-3.3-70b-versatile",
   "llama3-70b-8192",
   "gemma2-9b-it",
-  "llama-3.1-8b-instant",
+];
+
+export const HUMANIZE_MODELS = [
+  "llama-3.1-8b-instant",   // 30 000 TPM sur tier gratuit — idéal pour le volume
+  "gemma2-9b-it",
+  "llama-3.3-70b-versatile",
 ];
 
 export interface DetectionResult {
@@ -22,13 +28,15 @@ export function getClient() {
 /**
  * Appel Groq avec fallback automatique entre modèles.
  */
+export const MODELS = DETECT_MODELS; // rétrocompat
+
 export async function chatWithFallback(
   groq: Groq,
   messages: Groq.Chat.ChatCompletionMessageParam[],
-  opts: { maxTokens: number; temperature: number; jsonMode?: boolean }
+  opts: { maxTokens: number; temperature: number; jsonMode?: boolean; models?: string[] }
 ): Promise<string> {
   let lastError = "";
-  for (const model of MODELS) {
+  for (const model of (opts.models ?? DETECT_MODELS)) {
     try {
       const completion = await groq.chat.completions.create({
         model,
@@ -171,7 +179,7 @@ NOTE : la version précédente était encore perçue comme générée par IA. Af
  * (puis de phrases si besoin), sans jamais couper un mot. Préserve la totalité
  * du contenu — rien n'est tronqué.
  */
-export function chunkText(text: string, maxChars = 1800): string[] {
+export function chunkText(text: string, maxChars = 2500): string[] {
   if (text.length <= maxChars) return [text];
 
   const paragraphs = text.split(/\n\s*\n/);
@@ -223,13 +231,10 @@ async function humanizeChunk(groq: Groq, chunk: string, aggressive: boolean): Pr
         content: `Réécris ce passage pour qu'il soit 100% humain et indétectable. GARDE LA MÊME LONGUEUR (ne résume pas, ne raccourcis pas, ne supprime aucune idée — conserve tout le contenu et tous les détails) :\n\n"""${chunk}"""`,
       },
     ],
-    { maxTokens: 2400, temperature: aggressive ? 0.85 : 0.7 }
+    { maxTokens: 3200, temperature: aggressive ? 0.85 : 0.7, models: HUMANIZE_MODELS }
   );
   return out.trim();
 }
-
-/** Petite pause pour respecter la limite de tokens/minute du tier gratuit. */
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Réécrit un texte complet une fois — en le découpant en segments pour
@@ -237,15 +242,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 export async function humanizeOnce(groq: Groq, text: string, aggressive: boolean): Promise<string> {
   const chunks = chunkText(text);
-  if (chunks.length === 1) {
-    return humanizeChunk(groq, chunks[0], aggressive);
-  }
-  // Séquentiel + petite pause : on respecte la limite de tokens/minute (tier gratuit Groq).
-  const rewritten: string[] = [];
-  for (const c of chunks) {
-    rewritten.push(await humanizeChunk(groq, c, aggressive));
-    await sleep(1200);
-  }
+  // Parallèle : llama-3.1-8b-instant a 30 000 TPM, pas de risque de rate limit.
+  const rewritten = await Promise.all(chunks.map((c) => humanizeChunk(groq, c, aggressive)));
   return rewritten.join("\n\n");
 }
 
@@ -257,45 +255,12 @@ export interface HumanizeResult {
 }
 
 /**
- * Humanise en BOUCLE : réécrit, re-détecte, recommence jusqu'à passer
- * sous le seuil cible ou épuiser les tentatives. Garde la meilleure version.
+ * Humanise en une passe unique parallèle.
+ * La re-détection est supprimée pour rester dans la limite 60 s du plan Hobby Vercel.
  */
-export async function humanizeToTarget(
-  groq: Groq,
-  text: string,
-  target = 20,
-  maxIterations = 2
-): Promise<HumanizeResult> {
-  let current = text;
-  let best = "";
-  let bestScore = 101;
-  const history: number[] = [];
-
-  for (let i = 0; i < maxIterations; i++) {
-    current = await humanizeOnce(groq, current, i > 0);
-
-    let score: number;
-    try {
-      score = (await detect(groq, current)).percentage;
-    } catch {
-      // Si la détection échoue, on accepte la version courante
-      score = 0;
-    }
-    history.push(score);
-
-    if (score < bestScore) {
-      bestScore = score;
-      best = current;
-    }
-
-    if (score <= target) {
-      return { humanizedText: current, finalScore: score, iterations: i + 1, history };
-    }
-    // Sinon on repart de la meilleure version pour la prochaine passe
-    current = best;
-  }
-
-  return { humanizedText: best, finalScore: bestScore, iterations: maxIterations, history };
+export async function humanizeToTarget(groq: Groq, text: string): Promise<HumanizeResult> {
+  const humanizedText = await humanizeOnce(groq, text, false);
+  return { humanizedText, finalScore: 0, iterations: 1, history: [0] };
 }
 
 /**

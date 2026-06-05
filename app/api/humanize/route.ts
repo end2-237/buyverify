@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClient, humanizeToTarget, readText } from "@/lib/ai";
 
-export const maxDuration = 120;
+// Plan Hobby Vercel : 60 s max. Au-delà, la fonction est coupée.
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {

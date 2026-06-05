@@ -98,10 +98,10 @@ async function detectOnce(groq: Groq, text: string): Promise<DetectionResult> {
       { role: "system", content: DETECTION_SYSTEM },
       {
         role: "user",
-        content: `Analyse ce texte avec rigueur forensique. Rappel : calibre tes scores pour correspondre aux résultats de GPTZero et Originality.ai — ne sous-estime pas.\n\n"""${text.slice(0, 8000)}"""`,
+        content: `Analyse ce texte avec rigueur forensique. Rappel : calibre tes scores pour correspondre aux résultats de GPTZero et Originality.ai — ne sous-estime pas.\n\n"""${text.slice(0, 6000)}"""`,
       },
     ],
-    { maxTokens: 1200, temperature: 0, jsonMode: true }
+    { maxTokens: 900, temperature: 0, jsonMode: true }
   );
 
   const match = raw.match(/\{[\s\S]*\}/);
@@ -115,13 +115,11 @@ async function detectOnce(groq: Groq, text: string): Promise<DetectionResult> {
 }
 
 /**
- * Détecte le taux d'IA — double passe pour stabilité, on prend le max.
+ * Détecte le taux d'IA. Passe simple pour rester sous la limite de
+ * tokens/minute du tier gratuit Groq.
  */
 export async function detect(groq: Groq, text: string): Promise<DetectionResult> {
-  const [a, b] = await Promise.all([detectOnce(groq, text), detectOnce(groq, text)]);
-  // On prend le score le plus élevé des deux passes (calibration haute)
-  if (a.percentage >= b.percentage) return a;
-  return b;
+  return detectOnce(groq, text);
 }
 
 const HUMANIZE_SYSTEM = `Tu es un rédacteur professionnel chevronné. Ta mission : réécrire un texte pour qu'il passe pour l'œuvre d'un expert humain et échappe aux détecteurs d'IA (GPTZero, Originality.ai, Turnitin, Copyleaks, ZeroGPT) — TOUT EN RESTANT professionnel, cohérent et soigné. Le résultat doit ressembler à de l'excellent travail, pas à du bavardage.
@@ -157,7 +155,7 @@ NOTE : la version précédente était encore perçue comme générée par IA. Af
  * (puis de phrases si besoin), sans jamais couper un mot. Préserve la totalité
  * du contenu — rien n'est tronqué.
  */
-export function chunkText(text: string, maxChars = 3500): string[] {
+export function chunkText(text: string, maxChars = 1800): string[] {
   if (text.length <= maxChars) return [text];
 
   const paragraphs = text.split(/\n\s*\n/);
@@ -209,10 +207,13 @@ async function humanizeChunk(groq: Groq, chunk: string, aggressive: boolean): Pr
         content: `Réécris ce passage pour qu'il soit 100% humain et indétectable. GARDE LA MÊME LONGUEUR (ne résume pas, ne raccourcis pas, ne supprime aucune idée — conserve tout le contenu et tous les détails) :\n\n"""${chunk}"""`,
       },
     ],
-    { maxTokens: 8000, temperature: aggressive ? 0.85 : 0.7 }
+    { maxTokens: 2400, temperature: aggressive ? 0.85 : 0.7 }
   );
   return out.trim();
 }
+
+/** Petite pause pour respecter la limite de tokens/minute du tier gratuit. */
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Réécrit un texte complet une fois — en le découpant en segments pour
@@ -223,8 +224,12 @@ export async function humanizeOnce(groq: Groq, text: string, aggressive: boolean
   if (chunks.length === 1) {
     return humanizeChunk(groq, chunks[0], aggressive);
   }
-  // Traite les segments en parallèle pour rester dans les limites de temps.
-  const rewritten = await Promise.all(chunks.map((c) => humanizeChunk(groq, c, aggressive)));
+  // Séquentiel + petite pause : on respecte la limite de tokens/minute (tier gratuit Groq).
+  const rewritten: string[] = [];
+  for (const c of chunks) {
+    rewritten.push(await humanizeChunk(groq, c, aggressive));
+    await sleep(1200);
+  }
   return rewritten.join("\n\n");
 }
 

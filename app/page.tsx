@@ -330,10 +330,11 @@ export default function Home() {
     try {
       const r = await fetch("/api/detect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: src }) });
       const raw = await r.text();
-      if (!raw) throw new Error("Réponse vide du serveur (vérifiez la clé GROQ_API_KEY).");
-      const d = JSON.parse(raw);
+      if (!raw) throw new Error("Réponse vide du serveur. Vérifiez que GROQ_API_KEY est bien définie sur Vercel.");
+      let d: { error?: string; percentage?: number };
+      try { d = JSON.parse(raw); } catch { throw new Error("Le serveur a renvoyé une erreur inattendue. Vérifiez les logs Vercel."); }
       if (d.error) throw new Error(d.error);
-      setResult(d); setStep("result");
+      setResult(d as DetectionResult); setStep("result");
     } catch (e) { setError((e as Error).message); setStep("input"); }
   };
 
@@ -342,10 +343,11 @@ export default function Home() {
     try {
       const r = await fetch("/api/humanize", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
       const raw = await r.text();
-      if (!raw) throw new Error("Réponse vide du serveur (vérifiez la clé GROQ_API_KEY).");
-      const d = JSON.parse(raw);
+      if (!raw) throw new Error("Réponse vide du serveur. Vérifiez que GROQ_API_KEY est bien définie sur Vercel.");
+      let d: { error?: string; humanizedText?: string; finalScore?: number; iterations?: number };
+      try { d = JSON.parse(raw); } catch { throw new Error("Le serveur a renvoyé une erreur inattendue. Vérifiez les logs Vercel."); }
       if (d.error) throw new Error(d.error);
-      setHumanized(d.humanizedText);
+      setHumanized(d.humanizedText ?? "");
       setFinalScore(typeof d.finalScore === "number" ? d.finalScore : null);
       setIterations(typeof d.iterations === "number" ? d.iterations : 0);
       setStep("humanized");
@@ -590,12 +592,15 @@ export default function Home() {
                   <div className="anim-fade-up d2 surface" style={{ padding: "28px 32px", flex: 1, background: "rgba(255,255,255,0.92)" }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 16 }}>Indicateurs détectés</div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 8 }}>
-                      {result.indicators.map((ind, i) => (
-                        <div key={i} className="anim-reveal" style={{ animationDelay: `${i * 60}ms`, padding: "10px 14px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border-soft)", display: "flex", gap: 10, alignItems: "flex-start" }}>
-                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: scoreColor(result.percentage), flexShrink: 0, marginTop: 5 }} />
-                          <span style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.5 }}>{ind}</span>
-                        </div>
-                      ))}
+                      {result.indicators.map((ind, i) => {
+                        const label = typeof ind === "string" ? ind : (typeof ind === "object" && ind !== null ? (Object.values(ind as Record<string, unknown>).find(v => typeof v === "string") as string ?? JSON.stringify(ind)) : String(ind));
+                        return (
+                          <div key={i} className="anim-reveal" style={{ animationDelay: `${i * 60}ms`, padding: "10px 14px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border-soft)", display: "flex", gap: 10, alignItems: "flex-start" }}>
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: scoreColor(result.percentage), flexShrink: 0, marginTop: 5 }} />
+                            <span style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.5 }}>{label}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
